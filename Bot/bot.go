@@ -56,13 +56,23 @@ func newMessage(discord *discordgo.Session, message *discordgo.MessageCreate) {
 		return
 	}
 
-	// respond to user message if it contains `!help` or `!bye`
-	switch {
-	case strings.Contains(message.Content, "!help"):
-		discord.ChannelMessageSend(message.ChannelID, "Hello World😃")
-	case strings.Contains(message.Content, "!bye"):
-		discord.ChannelMessageSend(message.ChannelID, "Good Bye👋")
-		// add more cases if required
-	}
+	// Remove leading and trailing whitespace from the discord message
+	trimmed_string := strings.TrimSpace(message.Content)
 
+	// The strings.Fields() function will split on all whitespace, and exclude it from the final result.
+	//This is useful if you don’t care about the kind of whitespace, for example, tabs, spaces, and newlines all
+	//count as whitespace.
+	split_message := strings.Fields(trimmed_string)
+
+	if trimmed_string == "!help" {
+		discord.ChannelMessageSend(message.ChannelID, "Hello World😃")
+	} else if trimmed_string == "!fetchEN" {
+		discord.ChannelMessageSend(message.ChannelID, "Command missing card argument")
+	} else if split_message[0] == "!fetchEN" && len(split_message) > 1 {
+		joined_message := strings.Join(split_message[1:], " ")
+		discord.ChannelMessageSend(message.ChannelID, "Fetching data for "+joined_message)
+	} else if split_message[0] == "!fetchKR" && len(split_message) > 1 {
+		joined_message := strings.Join(split_message[1:], " ")
+		discord.ChannelMessageSend(message.ChannelID, "Fetching data for "+joined_message)
+	}
 }
