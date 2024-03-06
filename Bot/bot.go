@@ -17,7 +17,7 @@ import (
 var BotToken string
 var ConnectionStr string
 
-type CookieData struct {
+type CardData struct {
 	id               int
 	name             string
 	name_eng         string
@@ -56,9 +56,8 @@ func Run() {
 
 	// open session
 	err = discord.Open()
-	if err != nil {
-		log.Fatal(err)
-	}
+	checkNilErr(err)
+
 	defer discord.Close() // close session, after function termination
 
 	// keep bot running untill there is NO os interruption (ctrl + C)
@@ -69,6 +68,7 @@ func Run() {
 
 }
 
+// Connect to the PostGreSQL database
 func connectPostGres() (*sql.DB, error) {
 	conn, err := sql.Open("postgres", ConnectionStr)
 	if err != nil {
@@ -79,48 +79,53 @@ func connectPostGres() (*sql.DB, error) {
 	return conn, nil
 }
 
-func selectEN(name_eng string, conn *sql.DB) ([]CookieData, error) {
-	query := "SELECT * FROM cards WHERE UPPER(name_eng) LIKE UPPER('%" + name_eng + "%')"
-	rows, err := conn.Query(query)
+// Searches the cards database using English parameters.
+func selectEN(name_eng string, conn *sql.DB) ([]CardData, error) {
+	// Editting user input to allow to search for records that contain the input
+	name_eng_editted := "%" + strings.Trim(name_eng, "%") + "%"
+	// Use parameters to prevent SQL injection attacks
+	query := "SELECT * FROM cards WHERE UPPER(name_eng) LIKE UPPER($1)"
+	rows, err := conn.Query(query, name_eng_editted)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 	defer rows.Close()
-	// A CookieData slice to hold data from returned rows.
-	var cookieDatas []CookieData
+	// A CardData slice to hold data from returned rows.
+	var cardDatas []CardData
 	// Loop through rows, using Scan to assign column data to struct fields.
 	for rows.Next() {
-		var cookie CookieData
-		if err := rows.Scan(&cookie.id, &cookie.name, &cookie.name_eng, &cookie.code, &cookie.rarity,
-			&cookie.rarity_abb, &cookie.card_type, &cookie.color, &cookie.color_sub, &cookie.level, &cookie.plain_string_eng,
-			&cookie.plain_string, &cookie.expansion, &cookie.illustrator, &cookie.link, &cookie.image_link); err != nil {
-			return cookieDatas, err
+		var card CardData
+		if err := rows.Scan(&card.id, &card.name, &card.name_eng, &card.code, &card.rarity,
+			&card.rarity_abb, &card.card_type, &card.color, &card.color_sub, &card.level, &card.plain_string_eng,
+			&card.plain_string, &card.expansion, &card.illustrator, &card.link, &card.image_link); err != nil {
+			return cardDatas, err
 		}
-		cookieDatas = append(cookieDatas, cookie)
+		cardDatas = append(cardDatas, card)
 	}
 	if err = rows.Err(); err != nil {
-		return cookieDatas, err
+		return cardDatas, err
 	}
-	return cookieDatas, nil
+	return cardDatas, nil
 }
 
-func displayCookieData(discord *discordgo.Session, message *discordgo.MessageCreate, cookieRow CookieData) {
-	botMessage := cookieRow.image_link + "\n" +
-		"id: " + strconv.Itoa(cookieRow.id) + "\n" +
-		"name: " + cookieRow.name + "\n" +
-		"name_eng: " + cookieRow.name_eng + "\n" +
-		"code: " + cookieRow.code + "\n" +
-		"rarity: " + cookieRow.rarity + "\n" +
-		"rarity_abb: " + cookieRow.rarity_abb + "\n" +
-		"card_type: " + cookieRow.card_type + "\n" +
-		"color: " + cookieRow.color + "\n" +
-		"color_sub: " + cookieRow.color_sub + "\n" +
-		"level: " + strconv.Itoa(cookieRow.level) + "\n" +
-		"plain_string_eng: " + cookieRow.plain_string_eng + "\n" +
-		"plain_string: " + cookieRow.plain_string + "\n" +
-		"expansion: " + cookieRow.expansion + "\n" +
-		"illustrator: " + cookieRow.illustrator + "\n" +
-		"link: " + cookieRow.link + "\n"
+// Makes the Discord bot display the data it fetched via Discord message.
+func displayCardData(discord *discordgo.Session, message *discordgo.MessageCreate, cardRow CardData) {
+	botMessage := cardRow.image_link + "\n" +
+		"id: " + strconv.Itoa(cardRow.id) + "\n" +
+		"name: " + cardRow.name + "\n" +
+		"name_eng: " + cardRow.name_eng + "\n" +
+		"code: " + cardRow.code + "\n" +
+		"rarity: " + cardRow.rarity + "\n" +
+		"rarity_abb: " + cardRow.rarity_abb + "\n" +
+		"card_type: " + cardRow.card_type + "\n" +
+		"color: " + cardRow.color + "\n" +
+		"color_sub: " + cardRow.color_sub + "\n" +
+		"level: " + strconv.Itoa(cardRow.level) + "\n" +
+		"plain_string_eng: " + cardRow.plain_string_eng + "\n" +
+		"plain_string: " + cardRow.plain_string + "\n" +
+		"expansion: " + cardRow.expansion + "\n" +
+		"illustrator: " + cardRow.illustrator + "\n" +
+		"link: " + cardRow.link + "\n"
 	discord.ChannelMessageSend(message.ChannelID, botMessage)
 }
 
@@ -149,17 +154,21 @@ func newMessage(discord *discordgo.Session, message *discordgo.MessageCreate) {
 	} else if split_message[0] == "!fetchEN" && len(split_message) > 1 {
 		joined_message := strings.Join(split_message[1:], " ")
 		discord.ChannelMessageSend(message.ChannelID, "Fetching data for "+joined_message)
+
+		//Connect to PostGreSQL database
 		conn, err := connectPostGres()
 		if err != nil {
 			discord.ChannelMessageSend(message.ChannelID, "An error occured while attempting to connect to the database")
 		} else {
-			cookieRows, selectErr := selectEN(joined_message, conn)
+			//Fetch Card data
+			cardRows, selectErr := selectEN(joined_message, conn)
 			if selectErr != nil {
 				log.Fatal(selectErr)
 				discord.ChannelMessageSend(message.ChannelID, "An error occured while attempting to Scan Rows")
 			}
-			for _, cookieRow := range cookieRows {
-				displayCookieData(discord, message, cookieRow)
+			//For each card found, make the Discord bot display its data in a message.
+			for _, cardRow := range cardRows {
+				displayCardData(discord, message, cardRow)
 			}
 		}
 		fmt.Println("Closing connection")
