@@ -1,17 +1,40 @@
 package bot
 
 import (
+	"database/sql"
 	"fmt"
 	"log"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 
 	"github.com/bwmarrin/discordgo"
+	_ "github.com/lib/pq"
 )
 
 var BotToken string
+var ConnectionStr string
+
+type CookieData struct {
+	id               int
+	name             string
+	name_eng         string
+	code             string
+	rarity           string
+	rarity_abb       string
+	card_type        string
+	color            string
+	color_sub        string
+	level            int
+	plain_string_eng string
+	plain_string     string
+	expansion        string
+	illustrator      string
+	link             string
+	image_link       string
+}
 
 func checkNilErr(e error) {
 	if e != nil {
@@ -20,8 +43,8 @@ func checkNilErr(e error) {
 }
 
 func Run() {
-
-	// create a session
+	// user=postgres.uexpudztesdujzrmclis password=[YOUR-PASSWORD] host=aws-0-ca-central-1.pooler.supabase.com port=5432 dbname=postgres
+	// create a discord session
 	discord, err := discordgo.New("Bot " + BotToken)
 	checkNilErr(err)
 
@@ -44,6 +67,61 @@ func Run() {
 	signal.Notify(c, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
 	<-c
 
+}
+
+func connectPostGres() (*sql.DB, error) {
+	conn, err := sql.Open("postgres", ConnectionStr)
+	if err != nil {
+		log.Fatal(err)
+		return nil, err
+	}
+	fmt.Println("Connection successful")
+	return conn, nil
+}
+
+func selectEN(name_eng string, conn *sql.DB) ([]CookieData, error) {
+	query := "SELECT * FROM cards WHERE UPPER(name_eng) LIKE UPPER('%" + name_eng + "%')"
+	rows, err := conn.Query(query)
+	if err != nil {
+		panic(err)
+	}
+	defer rows.Close()
+	// A CookieData slice to hold data from returned rows.
+	var cookieDatas []CookieData
+	// Loop through rows, using Scan to assign column data to struct fields.
+	for rows.Next() {
+		var cookie CookieData
+		if err := rows.Scan(&cookie.id, &cookie.name, &cookie.name_eng, &cookie.code, &cookie.rarity,
+			&cookie.rarity_abb, &cookie.card_type, &cookie.color, &cookie.color_sub, &cookie.level, &cookie.plain_string_eng,
+			&cookie.plain_string, &cookie.expansion, &cookie.illustrator, &cookie.link, &cookie.image_link); err != nil {
+			return cookieDatas, err
+		}
+		cookieDatas = append(cookieDatas, cookie)
+	}
+	if err = rows.Err(); err != nil {
+		return cookieDatas, err
+	}
+	return cookieDatas, nil
+}
+
+func displayCookieData(discord *discordgo.Session, message *discordgo.MessageCreate, cookieRow CookieData) {
+	botMessage := cookieRow.image_link + "\n" +
+		"id: " + strconv.Itoa(cookieRow.id) + "\n" +
+		"name: " + cookieRow.name + "\n" +
+		"name_eng: " + cookieRow.name_eng + "\n" +
+		"code: " + cookieRow.code + "\n" +
+		"rarity: " + cookieRow.rarity + "\n" +
+		"rarity_abb: " + cookieRow.rarity_abb + "\n" +
+		"card_type: " + cookieRow.card_type + "\n" +
+		"color: " + cookieRow.color + "\n" +
+		"color_sub: " + cookieRow.color_sub + "\n" +
+		"level: " + strconv.Itoa(cookieRow.level) + "\n" +
+		"plain_string_eng: " + cookieRow.plain_string_eng + "\n" +
+		"plain_string: " + cookieRow.plain_string + "\n" +
+		"expansion: " + cookieRow.expansion + "\n" +
+		"illustrator: " + cookieRow.illustrator + "\n" +
+		"link: " + cookieRow.link + "\n"
+	discord.ChannelMessageSend(message.ChannelID, botMessage)
 }
 
 func newMessage(discord *discordgo.Session, message *discordgo.MessageCreate) {
@@ -71,8 +149,25 @@ func newMessage(discord *discordgo.Session, message *discordgo.MessageCreate) {
 	} else if split_message[0] == "!fetchEN" && len(split_message) > 1 {
 		joined_message := strings.Join(split_message[1:], " ")
 		discord.ChannelMessageSend(message.ChannelID, "Fetching data for "+joined_message)
+		conn, err := connectPostGres()
+		if err != nil {
+			discord.ChannelMessageSend(message.ChannelID, "An error occured while attempting to connect to the database")
+		} else {
+			cookieRows, selectErr := selectEN(joined_message, conn)
+			if selectErr != nil {
+				log.Fatal(selectErr)
+				discord.ChannelMessageSend(message.ChannelID, "An error occured while attempting to Scan Rows")
+			}
+			for _, cookieRow := range cookieRows {
+				displayCookieData(discord, message, cookieRow)
+			}
+		}
+		fmt.Println("Closing connection")
+		conn.Close()
+		fmt.Println("DB connection closed")
 	} else if split_message[0] == "!fetchKR" && len(split_message) > 1 {
 		joined_message := strings.Join(split_message[1:], " ")
 		discord.ChannelMessageSend(message.ChannelID, "Fetching data for "+joined_message)
+		//todo implement korean searching
 	}
 }
