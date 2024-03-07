@@ -1,7 +1,7 @@
 A Discord bot to fetch Cookie Run Braverse TCG card information. Database used is a PostGreSQL database from Supabase
 
 Be sure to set the following environment variables:
-    Powershell users:
+
     $env:BOT_TOKEN = <discord bot token>
     $env:CONNECTION_STR = <postgres database connection string>
 
