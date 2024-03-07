@@ -75,7 +75,7 @@ func connectPostGres() (*sql.DB, error) {
 		log.Fatal(err)
 		return nil, err
 	}
-	fmt.Println("Connection successful.")
+	fmt.Println("DB Connection successful.")
 	return conn, nil
 }
 
@@ -184,7 +184,7 @@ func newMessage(discord *discordgo.Session, message *discordgo.MessageCreate) {
 					}
 				}
 			}
-			fmt.Println("Closing connection.")
+			// fmt.Println("Closing connection.")
 			conn.Close()
 			fmt.Println("DB connection closed.")
 		}
