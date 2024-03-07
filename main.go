@@ -2,18 +2,11 @@ package main
 
 import (
 	bot "discordbot/cookieruntcg_bot/Bot"
-	"log"
-	"os"
 
-	"github.com/joho/godotenv"
+	"os"
 )
 
 func main() {
-	//load environment variables from local.env
-	err := godotenv.Load("local.env")
-	if err != nil {
-		log.Fatal("Error")
-	}
 	//assign environment variable BOT_TOKEN to botToken
 	botToken := os.Getenv("BOT_TOKEN")
 	connectionStr := os.Getenv("CONNECTION_STR")
