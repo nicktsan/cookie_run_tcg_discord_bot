@@ -27,10 +27,10 @@ type CardData struct {
 	card_type        string
 	color            string
 	color_sub        string
-	level            int
+	level            sql.NullInt16
 	plain_string_eng string
 	plain_string     string
-	expansion        string
+	expansion        sql.NullString
 	illustrator      string
 	link             string
 	image_link       string
@@ -75,7 +75,7 @@ func connectPostGres() (*sql.DB, error) {
 		log.Fatal(err)
 		return nil, err
 	}
-	fmt.Println("Connection successful")
+	fmt.Println("Connection successful.")
 	return conn, nil
 }
 
@@ -120,10 +120,10 @@ func displayCardData(discord *discordgo.Session, message *discordgo.MessageCreat
 		"card_type: " + cardRow.card_type + "\n" +
 		"color: " + cardRow.color + "\n" +
 		"color_sub: " + cardRow.color_sub + "\n" +
-		"level: " + strconv.Itoa(cardRow.level) + "\n" +
+		"level: " + strconv.FormatInt(int64(cardRow.level.Int16), 10) + "\n" +
 		"plain_string_eng: " + cardRow.plain_string_eng + "\n" +
 		"plain_string: " + cardRow.plain_string + "\n" +
-		"expansion: " + cardRow.expansion + "\n" +
+		"expansion: " + cardRow.expansion.String + "\n" +
 		"illustrator: " + cardRow.illustrator + "\n" +
 		"link: " + cardRow.link + "\n"
 	discord.ChannelMessageSend(message.ChannelID, botMessage)
@@ -149,34 +149,35 @@ func newMessage(discord *discordgo.Session, message *discordgo.MessageCreate) {
 
 	if trimmed_string == "!help" {
 		discord.ChannelMessageSend(message.ChannelID, "Hello World😃")
-	} else if trimmed_string == "!fetchEN" {
-		discord.ChannelMessageSend(message.ChannelID, "Command missing card argument")
-	} else if split_message[0] == "!fetchEN" && len(split_message) > 1 {
-		joined_message := strings.Join(split_message[1:], " ")
-		discord.ChannelMessageSend(message.ChannelID, "Fetching data for "+joined_message)
-
-		//Connect to PostGreSQL database
-		conn, err := connectPostGres()
-		if err != nil {
-			discord.ChannelMessageSend(message.ChannelID, "An error occured while attempting to connect to the database")
+	} else if trimmed_string == "!fetchEN" || trimmed_string == "!fetchKR" {
+		discord.ChannelMessageSend(message.ChannelID, "Command missing card argument.")
+	} else if (split_message[0] == "!fetchEN" || split_message[0] == "!fetchKR") && len(split_message) > 1 {
+		// Prevent the Discord bot from returning hundreds of cards if the user only has "cookie" as their card search parameter.
+		if len(split_message) == 2 && (strings.Contains("cookie", strings.ToLower(split_message[1])) || strings.Contains("쿠키", split_message[1])) {
+			discord.ChannelMessageSend(message.ChannelID, "Please use more specific search parameters than just "+split_message[1]+".")
 		} else {
-			//Fetch Card data
-			cardRows, selectErr := selectEN(joined_message, conn)
-			if selectErr != nil {
-				log.Fatal(selectErr)
-				discord.ChannelMessageSend(message.ChannelID, "An error occured while attempting to Scan Rows")
+			joined_message := strings.Join(split_message[1:], " ")
+			discord.ChannelMessageSend(message.ChannelID, "Fetching data for "+joined_message+".")
+
+			//Connect to PostGreSQL database
+			conn, err := connectPostGres()
+			if err != nil {
+				discord.ChannelMessageSend(message.ChannelID, "An error occured while attempting to connect to the database.")
+			} else {
+				//Fetch Card data
+				cardRows, selectErr := selectEN(joined_message, conn)
+				if selectErr != nil {
+					log.Fatal(selectErr)
+					discord.ChannelMessageSend(message.ChannelID, "An error occured while attempting to scan database rows.")
+				}
+				//For each card found, make the Discord bot display its data in a message.
+				for _, cardRow := range cardRows {
+					displayCardData(discord, message, cardRow)
+				}
 			}
-			//For each card found, make the Discord bot display its data in a message.
-			for _, cardRow := range cardRows {
-				displayCardData(discord, message, cardRow)
-			}
+			fmt.Println("Closing connection.")
+			conn.Close()
+			fmt.Println("DB connection closed.")
 		}
-		fmt.Println("Closing connection")
-		conn.Close()
-		fmt.Println("DB connection closed")
-	} else if split_message[0] == "!fetchKR" && len(split_message) > 1 {
-		joined_message := strings.Join(split_message[1:], " ")
-		discord.ChannelMessageSend(message.ChannelID, "Fetching data for "+joined_message)
-		//todo implement korean searching
 	}
 }
