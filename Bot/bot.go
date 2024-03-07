@@ -80,12 +80,17 @@ func connectPostGres() (*sql.DB, error) {
 }
 
 // Searches the cards database using English parameters.
-func selectEN(name_eng string, conn *sql.DB) ([]CardData, error) {
+func selectCards(language string, card_name string, conn *sql.DB) ([]CardData, error) {
 	// Editting user input to allow to search for records that contain the input
-	name_eng_editted := "%" + strings.Trim(name_eng, "%") + "%"
+	card_name_editted := "%" + strings.Trim(card_name, "%") + "%"
 	// Use parameters to prevent SQL injection attacks
-	query := "SELECT * FROM cards WHERE UPPER(name_eng) LIKE UPPER($1)"
-	rows, err := conn.Query(query, name_eng_editted)
+	var query string
+	query = "SELECT * FROM cards WHERE UPPER(name_eng) LIKE UPPER($1)"
+	if language == "!fetchKR" {
+		query = "SELECT * FROM cards WHERE name LIKE $1"
+	}
+	// fmt.Println("query: " + query)
+	rows, err := conn.Query(query, card_name_editted)
 	if err != nil {
 		return nil, err
 	}
@@ -165,14 +170,18 @@ func newMessage(discord *discordgo.Session, message *discordgo.MessageCreate) {
 				discord.ChannelMessageSend(message.ChannelID, "An error occured while attempting to connect to the database.")
 			} else {
 				//Fetch Card data
-				cardRows, selectErr := selectEN(joined_message, conn)
+				cardRows, selectErr := selectCards(split_message[0], joined_message, conn)
 				if selectErr != nil {
 					log.Fatal(selectErr)
 					discord.ChannelMessageSend(message.ChannelID, "An error occured while attempting to scan database rows.")
 				}
 				//For each card found, make the Discord bot display its data in a message.
-				for _, cardRow := range cardRows {
-					displayCardData(discord, message, cardRow)
+				if len(cardRows) == 0 {
+					discord.ChannelMessageSend(message.ChannelID, "No data found for "+joined_message+".")
+				} else {
+					for _, cardRow := range cardRows {
+						displayCardData(discord, message, cardRow)
+					}
 				}
 			}
 			fmt.Println("Closing connection.")
