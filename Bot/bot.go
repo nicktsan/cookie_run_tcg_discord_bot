@@ -153,7 +153,11 @@ func newMessage(discord *discordgo.Session, message *discordgo.MessageCreate) {
 	split_message := strings.Fields(trimmed_string)
 
 	if trimmed_string == "!help" {
-		discord.ChannelMessageSend(message.ChannelID, "Hello World😃")
+		helpMessage := "`!fetchEN [card name in English]`\n" +
+			"Searches for a card by its English name. \n" +
+			"`!fetchKR [card name in Korean]`\n" +
+			"Searches for a card by its Korean name."
+		discord.ChannelMessageSend(message.ChannelID, helpMessage)
 	} else if trimmed_string == "!fetchEN" || trimmed_string == "!fetchKR" {
 		discord.ChannelMessageSend(message.ChannelID, "Command missing card argument.")
 	} else if (split_message[0] == "!fetchEN" || split_message[0] == "!fetchKR") && len(split_message) > 1 {
