@@ -1,0 +1,10 @@
+version: '3.9'
+
+services:
+    cookierun-tcg-card-fetcher-bot:
+        build: .
+        container_name: cookierun-tcg-card-fetcher-bot
+        restart: unless-stopped
+        environment:
+            BOT_TOKEN: <your discord bot token>
+            CONNECTION_STR: <your supabase db connection string>

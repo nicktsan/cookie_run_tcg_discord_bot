@@ -26,8 +26,37 @@ A Discord bot to fetch Cookie Run Braverse TCG card information. Database used i
 
 ## To start the bot:
 
-    go run main.go
+    $ go run main.go
 
+## Building the docker image
+Navigate to directory with the Dockerfile. Then, containerize the app with the command: 
+
+    $ docker compose build
+
+This should build a local Docker image.
+
+## Running the container
+First, edit the docker-compose.yml environment variables BOT_TOKEN and CONNECTION_STR.
+Then run the service:
+    $ docker compose up 
+
+## Deploying to Fly.io
+1. Create a Fly.io account at https://fly.io/
+2. Install the fly CLI. Instructions can be found at https://fly.io/docs/hands-on/install-flyctl/
+3. In the project's root directory, run in the terminal
+```
+$ flyctl launch
+```
+Follow the instructions in the terminal to set up your application
+4. Set secrets in fly for BOT_TOKEN and CONNECTION_STR with the following commands:
+```
+flyctl secrets set BOT_TOKEN=<your discord bot token>
+flyctl secrets set CONNECTION_STR=<your supabase db connection string>
+```
+5. After editting flyctl secrets, redeploy the project with:
+```
+flyctl deploy
+```
 ## Bot commands:
 
 | Command  | Description |

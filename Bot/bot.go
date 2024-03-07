@@ -16,6 +16,8 @@ import (
 
 var BotToken string
 var ConnectionStr string
+var postGres *sql.DB
+var postGresErr error
 
 type CardData struct {
 	id               int
@@ -47,6 +49,8 @@ func Run() {
 	// create a discord session
 	discord, err := discordgo.New("Bot " + BotToken)
 	checkNilErr(err)
+	postGres, postGresErr = connectPostGres()
+	checkNilErr(postGresErr)
 
 	// add a event handler
 	discord.AddHandler(newMessage)
@@ -58,14 +62,15 @@ func Run() {
 	err = discord.Open()
 	checkNilErr(err)
 
-	defer discord.Close() // close session, after function termination
+	defer discord.Close()  // close session, after function termination
+	defer postGres.Close() // close postGres connection after functin termination
 
 	// keep bot running untill there is NO os interruption (ctrl + C)
 	fmt.Println("Bot running....")
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
 	<-c
-
+	fmt.Println("DB connection closed.")
 }
 
 // Connect to the PostGreSQL database
@@ -168,29 +173,20 @@ func newMessage(discord *discordgo.Session, message *discordgo.MessageCreate) {
 			joined_message := strings.Join(split_message[1:], " ")
 			discord.ChannelMessageSend(message.ChannelID, "Fetching data for "+joined_message+".")
 
-			//Connect to PostGreSQL database
-			conn, err := connectPostGres()
-			if err != nil {
-				discord.ChannelMessageSend(message.ChannelID, "An error occured while attempting to connect to the database.")
+			//Fetch Card data
+			cardRows, selectErr := selectCards(split_message[0], joined_message, postGres)
+			if selectErr != nil {
+				log.Fatal(selectErr)
+				discord.ChannelMessageSend(message.ChannelID, "An error occured while attempting to scan database rows.")
+			}
+			//For each card found, make the Discord bot display its data in a message.
+			if len(cardRows) == 0 {
+				discord.ChannelMessageSend(message.ChannelID, "No data found for "+joined_message+".")
 			} else {
-				//Fetch Card data
-				cardRows, selectErr := selectCards(split_message[0], joined_message, conn)
-				if selectErr != nil {
-					log.Fatal(selectErr)
-					discord.ChannelMessageSend(message.ChannelID, "An error occured while attempting to scan database rows.")
-				}
-				//For each card found, make the Discord bot display its data in a message.
-				if len(cardRows) == 0 {
-					discord.ChannelMessageSend(message.ChannelID, "No data found for "+joined_message+".")
-				} else {
-					for _, cardRow := range cardRows {
-						displayCardData(discord, message, cardRow)
-					}
+				for _, cardRow := range cardRows {
+					displayCardData(discord, message, cardRow)
 				}
 			}
-			// fmt.Println("Closing connection.")
-			conn.Close()
-			fmt.Println("DB connection closed.")
 		}
 	}
 }
