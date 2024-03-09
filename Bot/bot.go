@@ -40,18 +40,18 @@ type CardData struct {
 
 func checkNilErr(e error) {
 	if e != nil {
-		log.Fatal(e)
+		log.Panic(e)
 	}
 }
 
 func Run() {
-	// user=postgres.uexpudztesdujzrmclis password=[YOUR-PASSWORD] host=aws-0-ca-central-1.pooler.supabase.com port=5432 dbname=postgres
 	// create a discord session
 	discord, err := discordgo.New("Bot " + BotToken)
 	checkNilErr(err)
+
 	postGres, postGresErr = connectPostGres()
 	checkNilErr(postGresErr)
-
+	defer postGres.Close() // close postGres connection after functin termination
 	// add a event handler
 	discord.AddHandler(newMessage)
 
@@ -61,23 +61,19 @@ func Run() {
 	// open session
 	err = discord.Open()
 	checkNilErr(err)
-
-	defer discord.Close()  // close session, after function termination
-	defer postGres.Close() // close postGres connection after functin termination
-
+	defer discord.Close() // close session, after function termination
 	// keep bot running untill there is NO os interruption (ctrl + C)
 	fmt.Println("Bot running....")
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
 	<-c
-	fmt.Println("DB connection closed.")
 }
 
 // Connect to the PostGreSQL database
 func connectPostGres() (*sql.DB, error) {
 	conn, err := sql.Open("postgres", ConnectionStr)
 	if err != nil {
-		log.Fatal(err)
+		log.Panic(err)
 		return nil, err
 	}
 	fmt.Println("DB Connection successful.")
@@ -117,6 +113,166 @@ func selectCards(language string, card_name string, conn *sql.DB) ([]CardData, e
 	}
 	return cardDatas, nil
 }
+
+func listMultipleCards(discord *discordgo.Session, message *discordgo.MessageCreate, cardRows []CardData) {
+	var cardSelectMenuOptions []discordgo.SelectMenuOption
+	// Ensure the Select Menu Value is in the format of [Card Name] / [Card Code] / [Color] / [Rarity] / [Card Type] / [Level]
+	for _, cardRow := range cardRows {
+		optionLabel := cardRow.name_eng + " / " + cardRow.name //+
+		// " / " + cardRow.code + " / " + cardRow.color + " / " + cardRow.rarity + " / " +
+		// 	cardRow.card_type + " / " + strconv.FormatInt(int64(cardRow.level.Int16), 10)
+		optionValue := cardRow.name_eng + " / " + cardRow.name +
+			" / " + cardRow.code + " / " + cardRow.color + " / " + cardRow.rarity + " / " +
+			cardRow.card_type + " / " + strconv.FormatInt(int64(cardRow.level.Int16), 10)
+		optionDescription := cardRow.code + " / " + cardRow.color + " / " + cardRow.rarity + " / " +
+			cardRow.card_type + " / " + strconv.FormatInt(int64(cardRow.level.Int16), 10)
+		fmt.Println("optionValue from listMultipleCards: " + optionValue)
+		fmt.Println("optionLabel from listMultipleCards: " + optionLabel)
+		fmt.Println("optionDescription from listMultipleCards: " + optionDescription)
+		var colourEmoji string
+		switch strings.ToLower(cardRow.color) {
+		case "red":
+			colourEmoji = "🔴"
+		case "yellow":
+			colourEmoji = "🟡"
+		case "blue":
+			colourEmoji = "🔵"
+		case "purple":
+			colourEmoji = "🟣"
+		case "green":
+			colourEmoji = "🟢"
+		}
+		cardOption := discordgo.SelectMenuOption{
+			Label: optionLabel,
+			Value: optionValue,
+			Emoji: discordgo.ComponentEmoji{
+				Name: colourEmoji,
+			},
+			Description: optionDescription,
+			Default:     false,
+		}
+		cardSelectMenuOptions = append(cardSelectMenuOptions, cardOption)
+	}
+	fmt.Println("Formatting select Menu")
+	selectMenu := []discordgo.MessageComponent{
+		// Type: discordgo.MessageComponentTypeActionRow,
+		discordgo.ActionsRow{
+			Components: []discordgo.MessageComponent{
+				discordgo.SelectMenu{
+					// Select menu, as other components, must have a customID, so we set it to this value.
+					CustomID:    "select",
+					Placeholder: "Choose a card.",
+					Options:     cardSelectMenuOptions,
+					// Options: []discordgo.SelectMenuOption{
+					// 	{
+					// 		Label: "Go",
+					// 		// As with components, this things must have their own unique "id" to identify which is which.
+					// 		// In this case such id is Value field.
+					// 		Value: "go",
+					// 		Emoji: discordgo.ComponentEmoji{
+					// 			Name: "🦦",
+					// 		},
+					// 		// You can also make it a default option, but in this case we won't.
+					// 		Default:     false,
+					// 		Description: "Go programming language",
+					// 	},
+					// 	{
+					// 		Label: "JS",
+					// 		Value: "js",
+					// 		Emoji: discordgo.ComponentEmoji{
+					// 			Name: "🟨",
+					// 		},
+					// 		Description: "JavaScript programming language",
+					// 	},
+					// 	{
+					// 		Label: "Python",
+					// 		Value: "py",
+					// 		Emoji: discordgo.ComponentEmoji{
+					// 			Name: "🐍",
+					// 		},
+					// 		Description: "Python programming language",
+					// 	},
+					// },
+				},
+			},
+		},
+	}
+	fmt.Println("Attempting to create select menu")
+	discord.ChannelMessageSend(message.ChannelID, "Attempting to create select menu")
+	// Send the select menu in the channel where the command was received.
+	_, err := discord.ChannelMessageSendComplex(message.ChannelID, &discordgo.MessageSend{
+		Content: "Choose an option:",
+		// Components:      []discordgo.MessageComponent{&selectMenu},
+		Components: selectMenu,
+		// AllowedMentions: &discordgo.MessageAllowedMentions{},
+	})
+	if err != nil {
+		fmt.Println("Error sending message: ", err)
+	}
+}
+
+// func CreateSelectMenu(s *discordgo.Session, i *discordgo.InteractionCreate) {
+
+// 	// 	Also, if you are goning to implement this fucntion the string format for the each listup cards should be something like this down below.
+// 	// Brave Cookie / ST4-011 / Blue / Common / COOKIE / 3
+// 	// Which is in order of [Card Name] / [Card Code] / [Color] / [Rarity] / [Card Type] / [Level]
+// 	var response *discordgo.InteractionResponse
+// 	switch i.ApplicationCommandData().Options[0].Name {
+// 	case "single":
+// 		response = &discordgo.InteractionResponse{
+// 			Type: discordgo.InteractionResponseChannelMessageWithSource,
+// 			Data: &discordgo.InteractionResponseData{
+// 				Content: "Now let's take a look on selects. This is single item select menu.",
+// 				Flags:   discordgo.MessageFlagsEphemeral,
+// 				Components: []discordgo.MessageComponent{
+// 					discordgo.ActionsRow{
+// 						Components: []discordgo.MessageComponent{
+// 							discordgo.SelectMenu{
+// 								// Select menu, as other components, must have a customID, so we set it to this value.
+// 								CustomID:    "select",
+// 								Placeholder: "Choose your favorite programming language 👇",
+// 								Options: []discordgo.SelectMenuOption{
+// 									{
+// 										Label: "Go",
+// 										// As with components, this things must have their own unique "id" to identify which is which.
+// 										// In this case such id is Value field.
+// 										Value: "go",
+// 										Emoji: discordgo.ComponentEmoji{
+// 											Name: "🦦",
+// 										},
+// 										// You can also make it a default option, but in this case we won't.
+// 										Default:     false,
+// 										Description: "Go programming language",
+// 									},
+// 									{
+// 										Label: "JS",
+// 										Value: "js",
+// 										Emoji: discordgo.ComponentEmoji{
+// 											Name: "🟨",
+// 										},
+// 										Description: "JavaScript programming language",
+// 									},
+// 									{
+// 										Label: "Python",
+// 										Value: "py",
+// 										Emoji: discordgo.ComponentEmoji{
+// 											Name: "🐍",
+// 										},
+// 										Description: "Python programming language",
+// 									},
+// 								},
+// 							},
+// 						},
+// 					},
+// 				},
+// 			},
+// 		}
+// 	}
+// 	err := s.InteractionRespond(i.Interaction, response)
+// 	if err != nil {
+// 		panic(err)
+// 	}
+// }
 
 // Makes the Discord bot display the data it fetched via Discord message.
 func displayCardData(discord *discordgo.Session, message *discordgo.MessageCreate, cardRow CardData) {
@@ -176,16 +332,19 @@ func newMessage(discord *discordgo.Session, message *discordgo.MessageCreate) {
 			//Fetch Card data
 			cardRows, selectErr := selectCards(split_message[0], joined_message, postGres)
 			if selectErr != nil {
-				log.Fatal(selectErr)
+				log.Panic(selectErr)
 				discord.ChannelMessageSend(message.ChannelID, "An error occured while attempting to scan database rows.")
 			}
 			//For each card found, make the Discord bot display its data in a message.
 			if len(cardRows) == 0 {
 				discord.ChannelMessageSend(message.ChannelID, "No data found for "+joined_message+".")
+			} else if len(cardRows) == 1 {
+				displayCardData(discord, message, cardRows[0])
 			} else {
-				for _, cardRow := range cardRows {
-					displayCardData(discord, message, cardRow)
-				}
+				// for _, cardRow := range cardRows {
+				// 	displayCardData(discord, message, cardRow)
+				// }
+				listMultipleCards(discord, message, cardRows)
 			}
 		}
 	}
