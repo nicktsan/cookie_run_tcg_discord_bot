@@ -2,11 +2,11 @@ package bot
 
 import (
 	"database/sql"
+	dbRepo "discordbot/cookieruntcg_bot/repo"
 	"fmt"
 	"log"
 	"os"
 	"os/signal"
-	"strconv"
 	"strings"
 	"syscall"
 
@@ -16,41 +16,51 @@ import (
 
 var BotToken string
 var ConnectionStr string
-var postGres *sql.DB
-var postGresErr error
+var postGresRepo *dbRepo.CardRepo
 
-type CardData struct {
-	id               int
-	name             string
-	name_eng         string
-	code             string
-	rarity           string
-	rarity_abb       string
-	card_type        string
-	color            string
-	color_sub        string
-	level            sql.NullInt16
-	plain_string_eng string
-	plain_string     string
-	expansion        sql.NullString
-	illustrator      string
-	link             string
-	image_link       string
-}
+// var postGres *sql.DB
+// var postGresErr error
+
+// type CardData struct {
+// 	id               int
+// 	name             string
+// 	name_eng         string
+// 	code             string
+// 	rarity           string
+// 	rarity_abb       string
+// 	card_type        string
+// 	color            string
+// 	color_sub        string
+// 	level            sql.NullInt16
+// 	plain_string_eng string
+// 	plain_string     string
+// 	expansion        sql.NullString
+// 	illustrator      string
+// 	link             string
+// 	image_link       string
+// }
 
 func checkNilErr(e error) {
 	if e != nil {
-		log.Fatal(e)
+		log.Panic(e)
 	}
 }
 
+func InitDb() (*sql.DB, error) {
+	db, err := dbRepo.SqlConfig(ConnectionStr)
+	return db, err
+}
+
 func Run() {
-	// user=postgres.uexpudztesdujzrmclis password=[YOUR-PASSWORD] host=aws-0-ca-central-1.pooler.supabase.com port=5432 dbname=postgres
 	// create a discord session
 	discord, err := discordgo.New("Bot " + BotToken)
 	checkNilErr(err)
-	postGres, postGresErr = connectPostGres()
+	// postGres, postGresErr = connectPostGres()
+	postGres, postGresErr := InitDb()
+	defer postGres.Close() // close postGres connection after functin termination
 	checkNilErr(postGresErr)
+
+	postGresRepo = dbRepo.NewCardRepo(postGres)
 
 	// add a event handler
 	discord.AddHandler(newMessage)
@@ -61,83 +71,79 @@ func Run() {
 	// open session
 	err = discord.Open()
 	checkNilErr(err)
-
-	defer discord.Close()  // close session, after function termination
-	defer postGres.Close() // close postGres connection after functin termination
+	defer discord.Close() // close session, after function termination
 
 	// keep bot running untill there is NO os interruption (ctrl + C)
 	fmt.Println("Bot running....")
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
 	<-c
-	fmt.Println("DB connection closed.")
 }
 
 // Connect to the PostGreSQL database
-func connectPostGres() (*sql.DB, error) {
-	conn, err := sql.Open("postgres", ConnectionStr)
-	if err != nil {
-		log.Fatal(err)
-		return nil, err
-	}
-	fmt.Println("DB Connection successful.")
-	return conn, nil
-}
+// func connectPostGres() (*sql.DB, error) {
+// 	conn, err := sql.Open("postgres", ConnectionStr)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	fmt.Println("DB Connection successful.")
+// 	return conn, nil
+// }
 
 // Searches the cards database using English parameters.
-func selectCards(language string, card_name string, conn *sql.DB) ([]CardData, error) {
-	// Editting user input to allow to search for records that contain the input
-	card_name_editted := "%" + strings.Trim(card_name, "%") + "%"
-	// Use parameters to prevent SQL injection attacks
-	var query string
-	query = "SELECT * FROM cards WHERE UPPER(name_eng) LIKE UPPER($1)"
-	if language == "!fetchKR" {
-		query = "SELECT * FROM cards WHERE name LIKE $1"
-	}
-	// fmt.Println("query: " + query)
-	rows, err := conn.Query(query, card_name_editted)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	// A CardData slice to hold data from returned rows.
-	var cardDatas []CardData
-	// Loop through rows, using Scan to assign column data to struct fields.
-	for rows.Next() {
-		var card CardData
-		if err := rows.Scan(&card.id, &card.name, &card.name_eng, &card.code, &card.rarity,
-			&card.rarity_abb, &card.card_type, &card.color, &card.color_sub, &card.level, &card.plain_string_eng,
-			&card.plain_string, &card.expansion, &card.illustrator, &card.link, &card.image_link); err != nil {
-			return cardDatas, err
-		}
-		cardDatas = append(cardDatas, card)
-	}
-	if err = rows.Err(); err != nil {
-		return cardDatas, err
-	}
-	return cardDatas, nil
-}
+// func selectCards(language string, card_name string, conn *sql.DB) ([]CardData, error) {
+// 	// Editting user input to allow to search for records that contain the input
+// 	card_name_editted := "%" + strings.Trim(card_name, "%") + "%"
+// 	// Use parameters to prevent SQL injection attacks
+// 	var query string
+// 	query = "SELECT * FROM cards WHERE UPPER(name_eng) LIKE UPPER($1)"
+// 	if language == "!fetchKR" {
+// 		query = "SELECT * FROM cards WHERE name LIKE $1"
+// 	}
+// 	// fmt.Println("query: " + query)
+// 	rows, err := conn.Query(query, card_name_editted)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	defer rows.Close()
+// 	// A CardData slice to hold data from returned rows.
+// 	var cardDatas []CardData
+// 	// Loop through rows, using Scan to assign column data to struct fields.
+// 	for rows.Next() {
+// 		var card CardData
+// 		if err := rows.Scan(&card.id, &card.name, &card.name_eng, &card.code, &card.rarity,
+// 			&card.rarity_abb, &card.card_type, &card.color, &card.color_sub, &card.level, &card.plain_string_eng,
+// 			&card.plain_string, &card.expansion, &card.illustrator, &card.link, &card.image_link); err != nil {
+// 			return cardDatas, err
+// 		}
+// 		cardDatas = append(cardDatas, card)
+// 	}
+// 	if err = rows.Err(); err != nil {
+// 		return cardDatas, err
+// 	}
+// 	return cardDatas, nil
+// }
 
 // Makes the Discord bot display the data it fetched via Discord message.
-func displayCardData(discord *discordgo.Session, message *discordgo.MessageCreate, cardRow CardData) {
-	botMessage := cardRow.image_link + "\n" +
-		"id: " + strconv.Itoa(cardRow.id) + "\n" +
-		"name: " + cardRow.name + "\n" +
-		"name_eng: " + cardRow.name_eng + "\n" +
-		"code: " + cardRow.code + "\n" +
-		"rarity: " + cardRow.rarity + "\n" +
-		"rarity_abb: " + cardRow.rarity_abb + "\n" +
-		"card_type: " + cardRow.card_type + "\n" +
-		"color: " + cardRow.color + "\n" +
-		"color_sub: " + cardRow.color_sub + "\n" +
-		"level: " + strconv.FormatInt(int64(cardRow.level.Int16), 10) + "\n" +
-		"plain_string_eng: " + cardRow.plain_string_eng + "\n" +
-		"plain_string: " + cardRow.plain_string + "\n" +
-		"expansion: " + cardRow.expansion.String + "\n" +
-		"illustrator: " + cardRow.illustrator + "\n" +
-		"link: " + cardRow.link + "\n"
-	discord.ChannelMessageSend(message.ChannelID, botMessage)
-}
+// func displayCardData(discord *discordgo.Session, message *discordgo.MessageCreate, cardRow dbRepo.CardData) {
+// 	botMessage := cardRow.image_link + "\n" +
+// 		"id: " + strconv.Itoa(cardRow.id) + "\n" +
+// 		"name: " + cardRow.name + "\n" +
+// 		"name_eng: " + cardRow.name_eng + "\n" +
+// 		"code: " + cardRow.code + "\n" +
+// 		"rarity: " + cardRow.rarity + "\n" +
+// 		"rarity_abb: " + cardRow.rarity_abb + "\n" +
+// 		"card_type: " + cardRow.card_type + "\n" +
+// 		"color: " + cardRow.color + "\n" +
+// 		"color_sub: " + cardRow.color_sub + "\n" +
+// 		"level: " + strconv.FormatInt(int64(cardRow.level.Int16), 10) + "\n" +
+// 		"plain_string_eng: " + cardRow.plain_string_eng + "\n" +
+// 		"plain_string: " + cardRow.plain_string + "\n" +
+// 		"expansion: " + cardRow.expansion.String + "\n" +
+// 		"illustrator: " + cardRow.illustrator + "\n" +
+// 		"link: " + cardRow.link + "\n"
+// 	discord.ChannelMessageSend(message.ChannelID, botMessage)
+// }
 
 func newMessage(discord *discordgo.Session, message *discordgo.MessageCreate) {
 
@@ -174,9 +180,9 @@ func newMessage(discord *discordgo.Session, message *discordgo.MessageCreate) {
 			discord.ChannelMessageSend(message.ChannelID, "Fetching data for "+joined_message+".")
 
 			//Fetch Card data
-			cardRows, selectErr := selectCards(split_message[0], joined_message, postGres)
+			cardRows, selectErr := postGresRepo.selectCards(split_message[0], joined_message)
 			if selectErr != nil {
-				log.Fatal(selectErr)
+				log.Panic(selectErr)
 				discord.ChannelMessageSend(message.ChannelID, "An error occured while attempting to scan database rows.")
 			}
 			//For each card found, make the Discord bot display its data in a message.
