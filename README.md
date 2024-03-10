@@ -62,5 +62,4 @@ flyctl deploy
 | Command  | Description |
 | ------------- | ------------- |
 | !help  | Displays all bot commands and their descriptions.  |
-| !fetchEN [card name in English] | Searches for a card by its English name.  |
-| !fetchKR [card name in Korean] | Searches for a card by its Korean name. |
+| !fetch [card name in English or Korean] | Searches for a card by its English or Korean name.  |
