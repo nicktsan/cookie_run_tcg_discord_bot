@@ -2,7 +2,6 @@ package bot
 
 import (
 	"database/sql"
-	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -14,8 +13,12 @@ import (
 	_ "github.com/lib/pq"
 )
 
+// todo: eliminate stinky global variables
 var BotToken string
 var ConnectionStr string
+
+const CardSelectMenuCustomID = "cardSelectMenu"
+
 var postGres *sql.DB
 var postGresErr error
 
@@ -40,62 +43,55 @@ type CardData struct {
 
 func checkNilErr(e error) {
 	if e != nil {
-		log.Fatal(e)
+		log.Panic(e)
 	}
 }
 
 func Run() {
-	// user=postgres.uexpudztesdujzrmclis password=[YOUR-PASSWORD] host=aws-0-ca-central-1.pooler.supabase.com port=5432 dbname=postgres
 	// create a discord session
 	discord, err := discordgo.New("Bot " + BotToken)
 	checkNilErr(err)
+
 	postGres, postGresErr = connectPostGres()
 	checkNilErr(postGresErr)
-
+	defer postGres.Close() // close postGres connection after functin termination
 	// add a event handler
-	discord.AddHandler(newMessage)
-
+	discord.AddHandler(HandleNewMessage)
+	discord.AddHandler(HandleNewInteraction)
 	//Send intents to discord servers
 	discord.Identify.Intents = discordgo.IntentsAllWithoutPrivileged
 
 	// open session
 	err = discord.Open()
 	checkNilErr(err)
-
-	defer discord.Close()  // close session, after function termination
-	defer postGres.Close() // close postGres connection after functin termination
-
+	defer discord.Close() // close session, after function termination
 	// keep bot running untill there is NO os interruption (ctrl + C)
-	fmt.Println("Bot running....")
+	log.Println("Bot running....")
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
 	<-c
-	fmt.Println("DB connection closed.")
 }
 
 // Connect to the PostGreSQL database
 func connectPostGres() (*sql.DB, error) {
 	conn, err := sql.Open("postgres", ConnectionStr)
 	if err != nil {
-		log.Fatal(err)
+		log.Panic(err)
 		return nil, err
 	}
-	fmt.Println("DB Connection successful.")
+	log.Println("DB Connection successful.")
 	return conn, nil
 }
 
 // Searches the cards database using English parameters.
-func selectCards(language string, card_name string, conn *sql.DB) ([]CardData, error) {
-	// Editting user input to allow to search for records that contain the input
-	card_name_editted := "%" + strings.Trim(card_name, "%") + "%"
-	// Use parameters to prevent SQL injection attacks
-	var query string
-	query = "SELECT * FROM cards WHERE UPPER(name_eng) LIKE UPPER($1)"
-	if language == "!fetchKR" {
-		query = "SELECT * FROM cards WHERE name LIKE $1"
-	}
-	// fmt.Println("query: " + query)
-	rows, err := conn.Query(query, card_name_editted)
+func selectCards(query string, conn *sql.DB, queryArgs ...string) ([]CardData, error) {
+	// log.Println("query: " + query)
+	// log.Println("queryArgs: " + strings.Join(queryArgs, ", "))
+	var rows *sql.Rows
+	var err error
+
+	rows, err = conn.Query(query, queryArgs[0])
+
 	if err != nil {
 		return nil, err
 	}
@@ -118,28 +114,95 @@ func selectCards(language string, card_name string, conn *sql.DB) ([]CardData, e
 	return cardDatas, nil
 }
 
-// Makes the Discord bot display the data it fetched via Discord message.
-func displayCardData(discord *discordgo.Session, message *discordgo.MessageCreate, cardRow CardData) {
-	botMessage := cardRow.image_link + "\n" +
-		"id: " + strconv.Itoa(cardRow.id) + "\n" +
-		"name: " + cardRow.name + "\n" +
-		"name_eng: " + cardRow.name_eng + "\n" +
-		"code: " + cardRow.code + "\n" +
-		"rarity: " + cardRow.rarity + "\n" +
-		"rarity_abb: " + cardRow.rarity_abb + "\n" +
-		"card_type: " + cardRow.card_type + "\n" +
-		"color: " + cardRow.color + "\n" +
-		"color_sub: " + cardRow.color_sub + "\n" +
-		"level: " + strconv.FormatInt(int64(cardRow.level.Int16), 10) + "\n" +
-		"plain_string_eng: " + cardRow.plain_string_eng + "\n" +
-		"plain_string: " + cardRow.plain_string + "\n" +
-		"expansion: " + cardRow.expansion.String + "\n" +
-		"illustrator: " + cardRow.illustrator + "\n" +
-		"link: " + cardRow.link + "\n"
-	discord.ChannelMessageSend(message.ChannelID, botMessage)
+func listMultipleCards(discord *discordgo.Session, message *discordgo.MessageCreate, cardRows []CardData) {
+	var cardSelectMenuOptions []discordgo.SelectMenuOption
+	// Ensure the Select Menu Value is in the format of [Card Name] / [Card Code] / [Color] / [Rarity] / [Card Type] / [Level]
+	for _, cardRow := range cardRows {
+		optionLabel := cardRow.name_eng + " / " + cardRow.name //+
+		// " / " + cardRow.code + " / " + cardRow.color + " / " + cardRow.rarity + " / " +
+		// 	cardRow.card_type + " / " + strconv.FormatInt(int64(cardRow.level.Int16), 10)
+		optionValue := "code:" + cardRow.code
+		optionDescription := cardRow.code + " / " + cardRow.color + " / " + cardRow.rarity + " / " +
+			cardRow.card_type + " / " + strconv.FormatInt(int64(cardRow.level.Int16), 10)
+		// log.Println("optionValue from listMultipleCards: " + optionValue)
+		// log.Println("optionLabel from listMultipleCards: " + optionLabel)
+		// log.Println("optionDescription from listMultipleCards: " + optionDescription)
+		var colourEmoji string
+		switch strings.ToLower(cardRow.color) {
+		case "red":
+			colourEmoji = "🔴"
+		case "yellow":
+			colourEmoji = "🟡"
+		case "blue":
+			colourEmoji = "🔵"
+		case "purple":
+			colourEmoji = "🟣"
+		case "green":
+			colourEmoji = "🟢"
+		}
+		cardOption := discordgo.SelectMenuOption{
+			Label: optionLabel,
+			Value: optionValue,
+			Emoji: discordgo.ComponentEmoji{
+				Name: colourEmoji,
+			},
+			Description: optionDescription,
+			Default:     false,
+		}
+		cardSelectMenuOptions = append(cardSelectMenuOptions, cardOption)
+	}
+	// log.Println("Formatting select Menu")
+	selectMenu := []discordgo.MessageComponent{
+		// Type: discordgo.MessageComponentTypeActionRow,
+		discordgo.ActionsRow{
+			Components: []discordgo.MessageComponent{
+				discordgo.SelectMenu{
+					// Select menu, as other components, must have a customID, so we set it to this value.
+					CustomID:    CardSelectMenuCustomID,
+					Placeholder: "Choose a card.",
+					Options:     cardSelectMenuOptions,
+				},
+			},
+		},
+	}
+	// log.Println("Attempting to create select menu")
+	discord.ChannelMessageSend(message.ChannelID, "Attempting to create select menu from multiple cards.")
+	// Send the select menu in the channel where the command was received.
+	_, err := discord.ChannelMessageSendComplex(message.ChannelID, &discordgo.MessageSend{
+		Content: "Choose an option:",
+		// Components:      []discordgo.MessageComponent{&selectMenu},
+		Components: selectMenu,
+		// AllowedMentions: &discordgo.MessageAllowedMentions{},
+	})
+	if err != nil {
+		log.Println("Error creating card select menu: ", err)
+		discord.ChannelMessageSend(message.ChannelID, "Error occured while attempting to create select menu.")
+	}
 }
 
-func newMessage(discord *discordgo.Session, message *discordgo.MessageCreate) {
+// Makes the Discord bot display the data it fetched via Discord message.
+func CardDataToString(cardRow CardData) string {
+	botMessage := cardRow.image_link + "\n" +
+		// "id: " + strconv.Itoa(cardRow.id) + "\n" +
+		"Name_EN: " + cardRow.name_eng + "\n" +
+		"Name_KR: " + cardRow.name + "\n" +
+		"Code: " + cardRow.code + "\n" +
+		"Rarity: " + cardRow.rarity + "\n" +
+		// "rarity_abb: " + cardRow.rarity_abb + "\n" +
+		"Card Type: " + cardRow.card_type + "\n" +
+		"Color: " + cardRow.color + "\n" +
+		// "color_sub: " + cardRow.color_sub + "\n" +
+		"Level: " + strconv.FormatInt(int64(cardRow.level.Int16), 10) + "\n" +
+		"Card Text_EN: " + cardRow.plain_string_eng + "\n" +
+		"Card Text_KR:: " + cardRow.plain_string
+	// "expansion: " + cardRow.expansion.String + "\n" +
+	// "illustrator: " + cardRow.illustrator + "\n" +
+	// "link: " + cardRow.link + "\n"
+
+	return botMessage
+}
+
+func HandleNewMessage(discord *discordgo.Session, message *discordgo.MessageCreate) {
 
 	/* prevent bot responding to its own message
 	this is achived by looking into the message author id
@@ -158,35 +221,62 @@ func newMessage(discord *discordgo.Session, message *discordgo.MessageCreate) {
 	split_message := strings.Fields(trimmed_string)
 
 	if trimmed_string == "!help" {
-		helpMessage := "`!fetchEN [card name in English]`\n" +
-			"Searches for a card by its English name. \n" +
-			"`!fetchKR [card name in Korean]`\n" +
-			"Searches for a card by its Korean name."
+		helpMessage := "`!fetch [card name in English or Korean]`\n" +
+			"Searches for a card by its English or Korean name."
 		discord.ChannelMessageSend(message.ChannelID, helpMessage)
-	} else if trimmed_string == "!fetchEN" || trimmed_string == "!fetchKR" {
+	} else if trimmed_string == "!fetch" {
 		discord.ChannelMessageSend(message.ChannelID, "Command missing card argument.")
-	} else if (split_message[0] == "!fetchEN" || split_message[0] == "!fetchKR") && len(split_message) > 1 {
+	} else if split_message[0] == "!fetch" && len(split_message) > 1 {
 		// Prevent the Discord bot from returning hundreds of cards if the user only has "cookie" as their card search parameter.
 		if len(split_message) == 2 && (strings.Contains("cookie", strings.ToLower(split_message[1])) || strings.Contains("쿠키", split_message[1])) {
 			discord.ChannelMessageSend(message.ChannelID, "Please use more specific search parameters than just "+split_message[1]+".")
 		} else {
 			joined_message := strings.Join(split_message[1:], " ")
 			discord.ChannelMessageSend(message.ChannelID, "Fetching data for "+joined_message+".")
-
-			//Fetch Card data
-			cardRows, selectErr := selectCards(split_message[0], joined_message, postGres)
+			// Editting user input to allow to search for records that contain the input
+			card_name_editted := "%" + strings.Trim(joined_message, "%") + "%"
+			query := "SELECT * FROM cards WHERE UPPER(name_eng) LIKE UPPER($1) OR name LIKE $1"
+			cardRows, selectErr := selectCards(query, postGres, card_name_editted)
 			if selectErr != nil {
-				log.Fatal(selectErr)
+				log.Println(selectErr)
 				discord.ChannelMessageSend(message.ChannelID, "An error occured while attempting to scan database rows.")
 			}
 			//For each card found, make the Discord bot display its data in a message.
 			if len(cardRows) == 0 {
 				discord.ChannelMessageSend(message.ChannelID, "No data found for "+joined_message+".")
+			} else if len(cardRows) == 1 {
+				botMessage := CardDataToString(cardRows[0])
+				discord.ChannelMessageSend(message.ChannelID, botMessage)
 			} else {
-				for _, cardRow := range cardRows {
-					displayCardData(discord, message, cardRow)
-				}
+				listMultipleCards(discord, message, cardRows)
 			}
+		}
+	}
+}
+
+func HandleNewInteraction(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	// Check if the interaction type is a component interaction.
+	if i.Type == discordgo.InteractionMessageComponent {
+		// Check if the component type is a select menu interaction.
+		if i.MessageComponentData().CustomID == CardSelectMenuCustomID {
+			// Get the selected value from the interaction.
+			selectedValue := i.MessageComponentData().Values[0]
+			//split the selected value by its separator
+			split_value := strings.Split(selectedValue, ":")
+			query := "SELECT * FROM cards WHERE UPPER(code) = UPPER($1)"
+			result, err := selectCards(query, postGres, split_value[1])
+			if err != nil {
+				s.ChannelMessageSend(i.ChannelID, "An error occured while attempting to scan database rows.")
+				log.Println(err)
+			}
+			botMessage := CardDataToString(result[0])
+			// Reply to the user with the selected value.
+			_ = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Content: botMessage,
+				},
+			})
 		}
 	}
 }
