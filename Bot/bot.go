@@ -2,10 +2,10 @@ package bot
 
 import (
 	"database/sql"
+	dbRepo "discordbot/cookieruntcg_bot/repo"
 	"log"
 	"os"
 	"os/signal"
-	"strconv"
 	"strings"
 	"syscall"
 
@@ -16,30 +16,30 @@ import (
 // todo: eliminate stinky global variables
 var BotToken string
 var ConnectionStr string
-
 const CardSelectMenuCustomID = "cardSelectMenu"
+var postGresRepo *dbRepo.CardRepo
 
-var postGres *sql.DB
-var postGresErr error
+// var postGres *sql.DB
+// var postGresErr error
 
-type CardData struct {
-	id               int
-	name             string
-	name_eng         string
-	code             string
-	rarity           string
-	rarity_abb       string
-	card_type        string
-	color            string
-	color_sub        string
-	level            sql.NullInt16
-	plain_string_eng string
-	plain_string     string
-	expansion        sql.NullString
-	illustrator      string
-	link             string
-	image_link       string
-}
+// type CardData struct {
+// 	id               int
+// 	name             string
+// 	name_eng         string
+// 	code             string
+// 	rarity           string
+// 	rarity_abb       string
+// 	card_type        string
+// 	color            string
+// 	color_sub        string
+// 	level            sql.NullInt16
+// 	plain_string_eng string
+// 	plain_string     string
+// 	expansion        sql.NullString
+// 	illustrator      string
+// 	link             string
+// 	image_link       string
+// }
 
 func checkNilErr(e error) {
 	if e != nil {
@@ -47,14 +47,22 @@ func checkNilErr(e error) {
 	}
 }
 
+func InitDb() (*sql.DB, error) {
+	db, err := dbRepo.SqlConfig(ConnectionStr)
+	return db, err
+}
+
 func Run() {
 	// create a discord session
 	discord, err := discordgo.New("Bot " + BotToken)
 	checkNilErr(err)
 
-	postGres, postGresErr = connectPostGres()
+	// postGres, postGresErr = connectPostGres()
+	postGres, postGresErr := InitDb()
 	checkNilErr(postGresErr)
-	defer postGres.Close() // close postGres connection after functin termination
+  defer postGres.Close() // close postGres connection after functin termination
+	postGresRepo = dbRepo.NewCardRepo(postGres)
+
 	// add a event handler
 	discord.AddHandler(HandleNewMessage)
 	discord.AddHandler(HandleNewInteraction)
@@ -65,6 +73,7 @@ func Run() {
 	err = discord.Open()
 	checkNilErr(err)
 	defer discord.Close() // close session, after function termination
+
 	// keep bot running untill there is NO os interruption (ctrl + C)
 	log.Println("Bot running....")
 	c := make(chan os.Signal, 1)
@@ -73,6 +82,7 @@ func Run() {
 }
 
 // Connect to the PostGreSQL database
+
 func connectPostGres() (*sql.DB, error) {
 	conn, err := sql.Open("postgres", ConnectionStr)
 	if err != nil {
@@ -83,7 +93,7 @@ func connectPostGres() (*sql.DB, error) {
 	return conn, nil
 }
 
-// Searches the cards database using English parameters.
+// Searches the cards database using a custom query
 func selectCards(query string, conn *sql.DB, queryArgs ...string) ([]CardData, error) {
 	// log.Println("query: " + query)
 	// log.Println("queryArgs: " + strings.Join(queryArgs, ", "))
@@ -181,6 +191,7 @@ func listMultipleCards(discord *discordgo.Session, message *discordgo.MessageCre
 }
 
 // Makes the Discord bot display the data it fetched via Discord message.
+
 func CardDataToString(cardRow CardData) string {
 	botMessage := cardRow.image_link + "\n" +
 		// "id: " + strconv.Itoa(cardRow.id) + "\n" +

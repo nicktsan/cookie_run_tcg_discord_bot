@@ -2,7 +2,6 @@ package main
 
 import (
 	bot "discordbot/cookieruntcg_bot/Bot"
-
 	"os"
 )
 
