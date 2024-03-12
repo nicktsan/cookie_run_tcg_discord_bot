@@ -53,10 +53,17 @@ Follow the instructions in the terminal to set up your application
 flyctl secrets set BOT_TOKEN=<your discord bot token>
 flyctl secrets set CONNECTION_STR=<your supabase db connection string>
 ```
-5. After editting flyctl secrets, redeploy the project with:
+5. After editting flyctl secrets, navigate to the project's root directory and deploy the project with:
 ```
 flyctl deploy
 ```
+
+## Redeploying to Fly.io
+1. After making your changes, simply navigate to the project's root directory and run:
+```
+flyctl deploy
+```
+
 ## Bot commands:
 
 | Command  | Description |
