@@ -1,6 +1,7 @@
 package errorFunctions
 
 import (
+	"fmt"
 	"log"
 
 	"github.com/bwmarrin/discordgo"
@@ -8,21 +9,21 @@ import (
 
 func CheckNilErrPanic(customMessage string, e error) {
 	if e != nil {
-		log.Println(customMessage)
+		fmt.Println(customMessage)
 		log.Panic(e)
 	}
 }
 
 func CheckNilErrPrintln(customMessage string, e error) {
 	if e != nil {
-		log.Println(customMessage)
-		log.Println(e)
+		fmt.Println(customMessage)
+		fmt.Println(e)
 	}
 }
 
 func CheckNilErrChannelMessageSend(customMessage string, e error, discord *discordgo.Session, ChannelID string) {
 	if e != nil {
-		log.Println(e)
+		fmt.Println(e)
 		discord.ChannelMessageSend(ChannelID, "An error occured while attempting to scan database rows.")
 	}
 }

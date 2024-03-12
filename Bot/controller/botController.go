@@ -1,7 +1,7 @@
 package botController
 
 import (
-	"log"
+	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
@@ -42,7 +42,7 @@ func (bController *BotController) Run() {
 	errFunc.CheckNilErrPanic("Error occured while attempting to open a websocket connection to Discord.", discordOpenErr)
 	defer discord.Close() // close session, after function termination
 	// keep bot running untill there is NO os interruption (ctrl + C)
-	log.Println("Bot running....")
+	fmt.Println("Bot running....")
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
 	<-c
