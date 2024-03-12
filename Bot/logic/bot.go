@@ -51,13 +51,14 @@ func (bot *Bot) HandleNewMessage(discord *discordgo.Session, message *discordgo.
 		discord.ChannelMessageSend(message.ChannelID, "Command missing card argument.")
 	} else if split_message[0] == "!fetch" && len(split_message) > 1 {
 		// Prevent the Discord bot from returning hundreds of cards if the user only has "cookie" as their card search parameter.
-		if len(split_message) == 2 && (strings.Contains("cookie", strings.ToLower(split_message[1])) || strings.Contains("쿠키", split_message[1])) {
+		if len(split_message) == 2 && (len(split_message[1]) < 2 || strings.Contains("cookie", strings.ToLower(split_message[1])) || strings.Contains("쿠키", split_message[1])) {
 			discord.ChannelMessageSend(message.ChannelID, "Please use more specific search parameters than just "+split_message[1]+".")
 		} else {
 			joined_message := strings.Join(split_message[1:], " ")
 			discord.ChannelMessageSend(message.ChannelID, "Fetching data for "+joined_message+".")
 			// Editting user input to allow to search for records that contain the input
 			card_name_editted := "%" + strings.Trim(joined_message, "%") + "%"
+			//todo: use an sql builder
 			query := "SELECT * FROM cards WHERE UPPER(name_eng) LIKE UPPER($1) OR name LIKE $1"
 			cardRows, selectErr := bot.SelectCards(query, card_name_editted)
 			errFunc.CheckNilErrChannelMessageSend("An error occured while attempting to scan database rows.", selectErr, discord, message.ChannelID)
@@ -83,6 +84,7 @@ func (bot *Bot) HandleNewInteraction(s *discordgo.Session, i *discordgo.Interact
 			selectedValue := i.MessageComponentData().Values[0]
 			//split the selected value by its separator
 			split_value := strings.Split(selectedValue, ":")
+			//todo use an sql builder
 			query := "SELECT * FROM cards WHERE UPPER(code) = UPPER($1)"
 			result, err := bot.SelectCards(query, split_value[1])
 			errFunc.CheckNilErrChannelMessageSend("An error occured while attempting to scan database rows.", err, s, i.ChannelID)
@@ -99,8 +101,8 @@ func (bot *Bot) HandleNewInteraction(s *discordgo.Session, i *discordgo.Interact
 }
 
 func (bot *Bot) SelectCards(query string, queryArgs ...string) ([]cardD.CardData, error) {
-	// log.Println("query: " + query)
-	// log.Println("queryArgs: " + strings.Join(queryArgs, ", "))
+	// fmt.Println("query: " + query)
+	// fmt.Println("queryArgs: " + strings.Join(queryArgs, ", "))
 	var rows *sql.Rows
 	var err error
 
@@ -138,9 +140,9 @@ func (bot *Bot) ListMultipleCards(discord *discordgo.Session, message *discordgo
 		optionValue := "code:" + cardRow.Code
 		optionDescription := cardRow.Code + " / " + cardRow.Color + " / " + cardRow.Rarity + " / " +
 			cardRow.Card_type + " / " + strconv.FormatInt(int64(cardRow.Level.Int16), 10)
-		// log.Println("optionValue from ListMultipleCards: " + optionValue)
-		// log.Println("optionLabel from ListMultipleCards: " + optionLabel)
-		// log.Println("optionDescription from ListMultipleCards: " + optionDescription)
+		// fmt.Println("optionValue from ListMultipleCards: " + optionValue)
+		// fmt.Println("optionLabel from ListMultipleCards: " + optionLabel)
+		// fmt.Println("optionDescription from ListMultipleCards: " + optionDescription)
 		var colourEmoji string
 		switch strings.ToLower(cardRow.Color) {
 		case "red":
@@ -165,7 +167,7 @@ func (bot *Bot) ListMultipleCards(discord *discordgo.Session, message *discordgo
 		}
 		cardSelectMenuOptions = append(cardSelectMenuOptions, cardOption)
 	}
-	// log.Println("Formatting select Menu")
+	// fmt.Println("Formatting select Menu")
 	selectMenu := []discordgo.MessageComponent{
 		// Type: discordgo.MessageComponentTypeActionRow,
 		discordgo.ActionsRow{
@@ -179,7 +181,7 @@ func (bot *Bot) ListMultipleCards(discord *discordgo.Session, message *discordgo
 			},
 		},
 	}
-	// log.Println("Attempting to create select menu")
+	// fmt.Println("Attempting to create select menu")
 	discord.ChannelMessageSend(message.ChannelID, "Attempting to create select menu from multiple cards.")
 	// Send the select menu in the channel where the command was received.
 	_, err := discord.ChannelMessageSendComplex(message.ChannelID, &discordgo.MessageSend{
