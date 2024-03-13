@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	cardD "discordbot/cookieruntcg_bot/CardData"
 	errFunc "discordbot/cookieruntcg_bot/error"
@@ -50,8 +51,9 @@ func (bot *Bot) HandleNewMessage(discord *discordgo.Session, message *discordgo.
 	} else if trimmed_string == "!fetch" {
 		discord.ChannelMessageSend(message.ChannelID, "Command missing card argument.")
 	} else if split_message[0] == "!fetch" && len(split_message) > 1 {
-		// Prevent the Discord bot from returning hundreds of cards if the user only has "cookie" as their card search parameter.
-		if len(split_message) == 2 && (len(split_message[1]) < 2 || strings.Contains("cookie", strings.ToLower(split_message[1])) || strings.Contains("쿠키", split_message[1])) {
+		// Prevent the Discord bot from returning hundreds of cards if the user only has "cookie" as their card search parameter,
+		// or if the command only has one rune (character)
+		if len(split_message) == 2 && (utf8.RuneCountInString(split_message[1]) < 2 || strings.Contains("cookie", strings.ToLower(split_message[1])) || strings.Contains("쿠키", split_message[1])) {
 			discord.ChannelMessageSend(message.ChannelID, "Please use more specific search parameters than just "+split_message[1]+".")
 		} else {
 			joined_message := strings.Join(split_message[1:], " ")
