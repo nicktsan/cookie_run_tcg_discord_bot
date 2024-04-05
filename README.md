@@ -1,5 +1,10 @@
 A Discord bot to fetch Cookie Run Braverse TCG card information. Database used is a PostGreSQL database from Supabase
 
+## Inviting the Discord bot to your channel
+1. Copy and paste the following url into any search engine:
+https://discord.com/oauth2/authorize?client_id=1214462756120428564&permissions=309237701632&scope=bot
+2. Select the channel you want to invite the bot to.
+
 ## Prerequsistes:
 - Go installed
 - Supabase account, project, and database table
