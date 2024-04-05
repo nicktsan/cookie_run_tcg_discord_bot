@@ -1,15 +1,18 @@
 package bot
 
 import (
+	"context"
 	"database/sql"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	cardD "discordbot/cookieruntcg_bot/CardData"
 	errFunc "discordbot/cookieruntcg_bot/error"
 
 	"github.com/bwmarrin/discordgo"
+	"github.com/huandu/go-sqlbuilder"
 )
 
 type Bot struct {
@@ -60,9 +63,21 @@ func (bot *Bot) HandleNewMessage(discord *discordgo.Session, message *discordgo.
 			discord.ChannelMessageSend(message.ChannelID, "Fetching data for "+joined_message+".")
 			// Editting user input to allow to search for records that contain the input
 			card_name_editted := "%" + strings.Trim(joined_message, "%") + "%"
-			//todo: use an sql builder
-			query := "SELECT * FROM cards WHERE UPPER(name_eng) LIKE UPPER($1) OR name LIKE $1"
-			cardRows, selectErr := bot.SelectCards(query, card_name_editted)
+			//Use an SQL builder to build the query
+			sb := sqlbuilder.PostgreSQL.NewSelectBuilder()
+			sb.Select("*")
+			sb.From("cards")
+			sb.Where(
+				sb.Or(
+					sb.Like("UPPER(name_eng)", strings.ToUpper(card_name_editted)),
+					sb.Like("name", card_name_editted),
+				),
+			)
+			sql, args := sb.Build()
+			// fmt.Println(sql)
+			// fmt.Println(args)
+			// sql := "SELECT * FROM cards WHERE UPPER(name_eng) LIKE UPPER($1) OR name LIKE $1"
+			cardRows, selectErr := bot.SelectCards(sql, args)
 			errFunc.CheckNilErrChannelMessageSend("An error occured while attempting to scan database rows.", selectErr, discord, message.ChannelID)
 
 			//For each card found, make the Discord bot display its data in a message.
@@ -86,9 +101,18 @@ func (bot *Bot) HandleNewInteraction(s *discordgo.Session, i *discordgo.Interact
 			selectedValue := i.MessageComponentData().Values[0]
 			//split the selected value by its separator
 			split_value := strings.Split(selectedValue, ":")
-			//todo use an sql builder
-			query := "SELECT * FROM cards WHERE UPPER(code) = UPPER($1)"
-			result, err := bot.SelectCards(query, split_value[1])
+			//Use an SQL builder to build the query
+			sb := sqlbuilder.PostgreSQL.NewSelectBuilder()
+			sb.Select("*")
+			sb.From("cards")
+			sb.Where(
+				sb.Equal("UPPER(code)", strings.ToUpper(split_value[1])),
+			)
+			sql, args := sb.Build()
+			// fmt.Println(sql)
+			// fmt.Println(args)
+			//sql := "SELECT * FROM cards WHERE UPPER(code) = UPPER($1)"
+			result, err := bot.SelectCards(sql, args)
 			errFunc.CheckNilErrChannelMessageSend("An error occured while attempting to scan database rows.", err, s, i.ChannelID)
 			botMessage := cardD.CardDataToString(result[0])
 			// Reply to the user with the selected value.
@@ -102,18 +126,22 @@ func (bot *Bot) HandleNewInteraction(s *discordgo.Session, i *discordgo.Interact
 	}
 }
 
-func (bot *Bot) SelectCards(query string, queryArgs ...string) ([]cardD.CardData, error) {
+func (bot *Bot) SelectCards(query string, queryArgs []interface{}) ([]cardD.CardData, error) {
 	// fmt.Println("query: " + query)
 	// fmt.Println("queryArgs: " + strings.Join(queryArgs, ", "))
 	var rows *sql.Rows
 	var err error
 
-	rows, err = bot.Db.Query(query, queryArgs[0])
+	// Create a Context with a timeout.
+	queryCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 
+	rows, err = bot.Db.QueryContext(queryCtx, query, queryArgs...)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
+	// time.Sleep(time.Second * 6) //Comment out when not testing
 	// A CardData slice to hold data from returned rows.
 	var cardDatas []cardD.CardData
 	// Loop through rows, using Scan to assign column data to struct fields.
