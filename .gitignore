@@ -20,3 +20,5 @@ connection_str.txt
 
 # Go workspace file
 go.work
+
+*sql_testing.sql

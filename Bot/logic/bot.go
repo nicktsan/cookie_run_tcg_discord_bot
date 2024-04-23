@@ -65,18 +65,19 @@ func (bot *Bot) HandleNewMessage(discord *discordgo.Session, message *discordgo.
 			card_name_editted := "%" + strings.Trim(joined_message, "%") + "%"
 			//Use an SQL builder to build the query
 			sb := sqlbuilder.PostgreSQL.NewSelectBuilder()
-			sb.Select("*")
+			sb.Select("name_kr", "name_eng", "code", "rarity", "card_type", "color", "card_level", "plain_text_eng", "plain_text", "image_link")
 			sb.From("cards")
 			sb.Where(
 				sb.Or(
-					sb.Like("UPPER(name_eng)", strings.ToUpper(card_name_editted)),
-					sb.Like("name", card_name_editted),
+					// sb.Like("UPPER(name_eng)", strings.ToUpper(card_name_editted)), //todo tofix
+					sb.Like("name_eng_lower", strings.ToLower(card_name_editted)),
+					sb.Like("name_kr", card_name_editted),
 				),
 			)
 			sql, args := sb.Build()
 			// fmt.Println(sql)
 			// fmt.Println(args)
-			// sql := "SELECT * FROM cards WHERE UPPER(name_eng) LIKE UPPER($1) OR name LIKE $1"
+			// sql := "SELECT * FROM cards WHERE UPPER(name_eng) LIKE UPPER($1) OR name_kr LIKE $1"
 			cardRows, selectErr := bot.SelectCards(sql, args)
 			errFunc.CheckNilErrChannelMessageSend("An error occured while attempting to scan database rows.", selectErr, discord, message.ChannelID)
 
@@ -103,10 +104,21 @@ func (bot *Bot) HandleNewInteraction(s *discordgo.Session, i *discordgo.Interact
 			split_value := strings.Split(selectedValue, ":")
 			//Use an SQL builder to build the query
 			sb := sqlbuilder.PostgreSQL.NewSelectBuilder()
-			sb.Select("*")
+			// 	Name_kr  string
+			// Name_eng string
+			// Code     string
+			// Rarity   string
+			// Card_type string
+			// Color     string
+			// Card_level            sql.NullInt16
+			// Plain_text_eng string
+			// Plain_text     string
+			// Image_link string
+			sb.Select("name_kr", "name_eng", "code", "rarity", "card_type", "color", "card_level", "plain_text_eng", "plain_text", "image_link")
 			sb.From("cards")
 			sb.Where(
-				sb.Equal("UPPER(code)", strings.ToUpper(split_value[1])),
+				// sb.Equal("UPPER(code)", strings.ToUpper(split_value[1])),
+				sb.Equal("code", split_value[1]),
 			)
 			sql, args := sb.Build()
 			// fmt.Println(sql)
@@ -146,10 +158,20 @@ func (bot *Bot) SelectCards(query string, queryArgs []interface{}) ([]cardD.Card
 	var cardDatas []cardD.CardData
 	// Loop through rows, using Scan to assign column data to struct fields.
 	for rows.Next() {
+		// 	Name_kr  string
+		// Name_eng string
+		// Code     string
+		// Rarity   string
+		// Card_type string
+		// Color     string
+		// Card_level            sql.NullInt16
+		// Plain_text_eng string
+		// Plain_text     string
+		// Image_link string
 		var card cardD.CardData
-		if err := rows.Scan(&card.Id, &card.Name, &card.Name_eng, &card.Code, &card.Rarity,
-			&card.Rarity_abb, &card.Card_type, &card.Color, &card.Color_sub, &card.Level, &card.Plain_string_eng,
-			&card.Plain_string, &card.Expansion, &card.Illustrator, &card.Link, &card.Image_link); err != nil {
+		if err := rows.Scan( /*&card.Id, */ &card.Name_kr, &card.Name_eng, &card.Code, &card.Rarity,
+			/*&card.Rarity_abb,*/ &card.Card_type, &card.Color /*&card.Color_sub,*/, &card.Card_level, &card.Plain_text_eng,
+			&card.Plain_text /*&card.Expansion, &card.Illustrator, &card.Link,*/, &card.Image_link); err != nil {
 			return cardDatas, err
 		}
 		cardDatas = append(cardDatas, card)
@@ -164,12 +186,12 @@ func (bot *Bot) ListMultipleCards(discord *discordgo.Session, message *discordgo
 	var cardSelectMenuOptions []discordgo.SelectMenuOption
 	// Ensure the Select Menu Value is in the format of [Card Name] / [Card Code] / [Color] / [Rarity] / [Card Type] / [Level]
 	for _, cardRow := range cardRows {
-		optionLabel := cardRow.Name_eng + " / " + cardRow.Name //+
+		optionLabel := cardRow.Name_eng + " / " + cardRow.Name_kr //+
 		// " / " + cardRow.code + " / " + cardRow.Color + " / " + cardRow.Rarity + " / " +
 		// 	cardRow.Card_type + " / " + strconv.FormatInt(int64(cardRow.Level.Int16), 10)
 		optionValue := "code:" + cardRow.Code
 		optionDescription := cardRow.Code + " / " + cardRow.Color + " / " + cardRow.Rarity + " / " +
-			cardRow.Card_type + " / " + strconv.FormatInt(int64(cardRow.Level.Int16), 10)
+			cardRow.Card_type + " / " + strconv.FormatInt(int64(cardRow.Card_level.Int16), 10)
 		// fmt.Println("optionValue from ListMultipleCards: " + optionValue)
 		// fmt.Println("optionLabel from ListMultipleCards: " + optionLabel)
 		// fmt.Println("optionDescription from ListMultipleCards: " + optionDescription)
