@@ -61,23 +61,41 @@ func (bot *Bot) HandleNewMessage(discord *discordgo.Session, message *discordgo.
 		} else {
 			joined_message := strings.Join(split_message[1:], " ")
 			discord.ChannelMessageSend(message.ChannelID, "Fetching data for "+joined_message+".")
-			// Editting user input to allow to search for records that contain the input
-			card_name_editted := "%" + strings.Trim(joined_message, "%") + "%"
 			//Use an SQL builder to build the query
 			sb := sqlbuilder.PostgreSQL.NewSelectBuilder()
+			// Editting user input to allow to search for records that contain the input
+			//Dynamically construct LIKE conditions with AND operator for name_eng_lower column
+			var eng_like_cond []string
+			for _, val := range split_message[1:] {
+				val_editted := "%" + strings.Trim(val, "%") + "%"
+				eng_like_cond = append(eng_like_cond, sb.Like("name_eng_lower", strings.ToLower(val_editted)))
+			}
+			eng_and_cond := sb.And(eng_like_cond...)
+			// fmt.Println("eng_and_cond")
+			// fmt.Println(eng_and_cond)
+
+			// Editting user input to allow to search for records that contain the input
+			//Dynamically construct LIKE conditions with AND operator for name_kr column
+			var kr_like_cond []string
+			for _, val := range split_message[1:] {
+				val_editted := "%" + strings.Trim(val, "%") + "%"
+				kr_like_cond = append(kr_like_cond, sb.Like("name_kr", val_editted))
+			}
+			kr_and_cond := sb.And(kr_like_cond...)
+			// fmt.Println("kr_and_cond")
+			// fmt.Println(kr_and_cond)
+
+			//Use an SQL builder to build the query
 			sb.Select("name_kr", "name_eng", "code", "rarity", "card_type", "color", "card_level", "plain_text_eng", "plain_text", "image_link")
 			sb.From("cards")
 			sb.Where(
 				sb.Or(
-					// sb.Like("UPPER(name_eng)", strings.ToUpper(card_name_editted)), //todo tofix
-					sb.Like("name_eng_lower", strings.ToLower(card_name_editted)),
-					sb.Like("name_kr", card_name_editted),
+					eng_and_cond, kr_and_cond,
 				),
 			)
 			sql, args := sb.Build()
 			// fmt.Println(sql)
 			// fmt.Println(args)
-			// sql := "SELECT * FROM cards WHERE UPPER(name_eng) LIKE UPPER($1) OR name_kr LIKE $1"
 			cardRows, selectErr := bot.SelectCards(sql, args)
 			errFunc.CheckNilErrChannelMessageSend("An error occured while attempting to scan database rows.", selectErr, discord, message.ChannelID)
 

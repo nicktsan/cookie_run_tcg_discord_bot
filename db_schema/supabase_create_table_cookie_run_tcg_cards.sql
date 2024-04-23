@@ -36,9 +36,3 @@ CREATE INDEX trgm_idx_cards_name_eng ON cards USING gin (name_eng_lower gin_trgm
 CREATE INDEX pgroonga_name_kr_index ON cards USING pgroonga (name_kr); --done in test
 
 -- DROP INDEX IF EXISTS pgroonga_name_kr_index;
- -- CREATE INDEX pgroonga_name_eng_lower_index ON cards USING pgroonga (name_eng_lower);
- -- DROP INDEX IF EXISTS pgroonga_name_eng_lower_index;
- -- CREATE INDEX pgroonga_name_eng_index ON cards USING pgroonga (name_eng);
- -- DROP INDEX IF EXISTS pgroonga_name_eng_index;
- -- CREATE INDEX card_code_index ON cards (code);
- -- DROP INDEX IF EXISTS card_code_index;
