@@ -3,36 +3,16 @@
 -- for
 -- select to public using (true);--done in prod and test
  -- ALTER TABLE cards ADD PRIMARY KEY (code); --done in prod and test
-
-ALTER TABLE cards RENAME COLUMN name TO name_kr; --done in test plan to do in prod
-
-
-ALTER TABLE cards RENAME COLUMN level TO card_level; --done in test plan to do in prod
-
-
-ALTER TABLE cards
-DROP CONSTRAINT cards_pkey; --done in test
-
-
-ALTER TABLE cards ADD PRIMARY KEY (id); --done in test
-
-
-ALTER TABLE cards ADD CONSTRAINT code_unique UNIQUE (code); --done in test
-
-
-CREATE EXTENSION IF NOT EXISTS pg_trgm; --done in test
-
-
-CREATE EXTENSION IF NOT EXISTS pgroonga; --done in test
-
-
-ALTER TABLE cards ADD COLUMN name_eng_lower TEXT GENERATED ALWAYS AS (LOWER(name_eng)) STORED; --done in test
-
-
-CREATE INDEX trgm_idx_cards_name_eng ON cards USING gin (name_eng_lower gin_trgm_ops); --done in test
-
--- DROP INDEX IF EXISTS trgm_idx_cards_name_eng;
-
-CREATE INDEX pgroonga_name_kr_index ON cards USING pgroonga (name_kr); --done in test
-
--- DROP INDEX IF EXISTS pgroonga_name_kr_index;
+ -- ALTER TABLE cards RENAME COLUMN name TO name_kr; --done in prod and test
+ -- ALTER TABLE cards RENAME COLUMN level TO card_level; --done in prod and test
+ -- ALTER TABLE cards
+-- DROP CONSTRAINT cards_pkey; --done in prod and test
+ -- ALTER TABLE cards ADD PRIMARY KEY (id); --done in prod and test
+ -- ALTER TABLE cards ADD CONSTRAINT code_unique UNIQUE (code); --done in prod and test
+ -- CREATE EXTENSION IF NOT EXISTS pg_trgm; --done in prod and test
+ -- CREATE EXTENSION IF NOT EXISTS pgroonga; --done in prod and test
+ -- ALTER TABLE cards ADD COLUMN name_eng_lower TEXT GENERATED ALWAYS AS (LOWER(name_eng)) STORED; --done in prod and test
+ -- CREATE INDEX trgm_idx_cards_name_eng ON cards USING gin (name_eng_lower gin_trgm_ops); --done in prod and test
+ -- -- DROP INDEX IF EXISTS trgm_idx_cards_name_eng;
+ -- CREATE INDEX pgroonga_name_kr_index ON cards USING pgroonga (name_kr); --done in prod and test
+ -- -- DROP INDEX IF EXISTS pgroonga_name_kr_index;
